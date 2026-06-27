@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>W/L Overlay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cyan:#25F4EE;
+    --pink:#FE2C55;
+    --ink:#FFFFFF;
+    --dim:rgba(255,255,255,.55);
+  }
+
+  *{ box-sizing:border-box; }
+
+  html,body{
+    margin:0;
+    padding:0;
+    background:transparent; /* transparent for TikTok Studio Link Source */
+    width:100%;
+    height:100%;
+    overflow:hidden;
+    font-family:'Anton', system-ui, sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .stage{
+    width:100%;
+    height:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+
+  .board{
+    display:flex;
+    align-items:center;
+    gap:28px;
+    padding:18px 26px;
+    user-select:none;
+  }
+
+  .stat{
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+    line-height:1;
+  }
+
+  .letter{
+    font-size:40px;
+    letter-spacing:1px;
+    color:var(--dim);
+  }
+
+  .count{
+    font-size:74px;
+    color:var(--ink);
+    min-width:1.1ch;
+    text-align:center;
+    transition:transform .12s ease;
+  }
+
+  .count.pulse{ transform:scale(1.18); }
+
+  .divider{
+    width:2px;
+    height:64px;
+    background:linear-gradient(180deg, var(--cyan), var(--pink));
+    border-radius:2px;
+    opacity:.8;
+  }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <div class="board">
+    <div class="stat">
+      <span class="letter">W</span>
+      <span class="count" id="winCount">0</span>
+    </div>
+    <div class="divider"></div>
+    <div class="stat">
+      <span class="letter">L</span>
+      <span class="count" id="lossCount">0</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  const winEl = document.getElementById('winCount');
+  const lossEl = document.getElementById('lossCount');
+
+  function pulse(el){
+    el.classList.remove('pulse');
+    requestAnimationFrame(() => el.classList.add('pulse'));
+    setTimeout(() => el.classList.remove('pulse'), 150);
+  }
+
+  async function poll(){
+    try{
+      const res = await fetch('/api/score', { cache: 'no-store' });
+      const data = await res.json();
+      const newWin = String(data.win ?? 0);
+      const newLoss = String(data.loss ?? 0);
+      if(winEl.textContent !== newWin){ winEl.textContent = newWin; pulse(winEl); }
+      if(lossEl.textContent !== newLoss){ lossEl.textContent = newLoss; pulse(lossEl); }
+    }catch(e){
+      // server not reachable yet, just retry next tick
+    }
+  }
+
+  poll();
+  setInterval(poll, 800);
+</script>
+
+</body>
+</html>

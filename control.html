@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>W/L Control Panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cyan:#25F4EE;
+    --pink:#FE2C55;
+    --ink:#FFFFFF;
+    --dim:rgba(255,255,255,.55);
+  }
+
+  *{ box-sizing:border-box; }
+
+  html,body{
+    margin:0;
+    padding:0;
+    background:#0A0A0A;
+    width:100%;
+    min-height:100%;
+    font-family:'Anton', system-ui, sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .stage{
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:28px;
+    padding:30px 20px;
+  }
+
+  .hint{
+    font-family:system-ui, sans-serif;
+    font-size:13px;
+    color:var(--dim);
+    text-align:center;
+    max-width:340px;
+  }
+
+  .board{
+    display:flex;
+    align-items:center;
+    gap:28px;
+  }
+
+  .stat{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:16px;
+  }
+
+  .row{
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+    line-height:1;
+  }
+
+  .letter{
+    font-size:36px;
+    letter-spacing:1px;
+    color:var(--dim);
+  }
+
+  .count{
+    font-size:64px;
+    color:var(--ink);
+    min-width:1.1ch;
+    text-align:center;
+    transition:transform .12s ease;
+  }
+
+  .count.pulse{ transform:scale(1.18); }
+
+  .divider{
+    width:2px;
+    height:56px;
+    background:linear-gradient(180deg, var(--cyan), var(--pink));
+    border-radius:2px;
+    opacity:.8;
+  }
+
+  .controls{
+    display:flex;
+    gap:12px;
+  }
+
+  .ctrl-btn{
+    appearance:none;
+    border:none;
+    width:54px;
+    height:54px;
+    border-radius:14px;
+    font-size:30px;
+    font-weight:700;
+    font-family:inherit;
+    line-height:1;
+    color:#FFFFFF;
+    cursor:pointer;
+    box-shadow:0 2px 6px rgba(0,0,0,.45);
+    transition:transform .08s ease, filter .15s ease;
+  }
+
+  .ctrl-btn.plus{ background:#20C46B; }
+  .ctrl-btn.minus{ background:#E83A4E; }
+
+  .ctrl-btn:hover{ filter:brightness(1.12); }
+  .ctrl-btn:active{ transform:scale(.88); }
+  .ctrl-btn:disabled{ opacity:.5; cursor:default; }
+
+  .reset{
+    margin-top:6px;
+    background:none;
+    border:1px solid var(--dim);
+    color:var(--dim);
+    font-family:system-ui, sans-serif;
+    font-size:12px;
+    padding:6px 14px;
+    border-radius:20px;
+    cursor:pointer;
+  }
+  .reset:hover{ color:var(--ink); border-color:var(--ink); }
+
+  .status{
+    font-family:system-ui, sans-serif;
+    font-size:11px;
+    color:var(--dim);
+  }
+</style>
+</head>
+<body>
+
+<div class="stage">
+
+  <div class="hint">เปิดหน้านี้ในเบราว์เซอร์ (มือถือหรือคอมก็ได้) แยกจาก TikTok Studio — กดปุ่มที่นี่แล้วตัวเลขจะไปอัปเดตที่ overlay ให้เอง</div>
+
+  <div class="board">
+
+    <div class="stat">
+      <div class="row">
+        <span class="letter">W</span>
+        <span class="count" id="winCount">0</span>
+      </div>
+      <div class="controls">
+        <button class="ctrl-btn minus" id="winMinus" title="ลด Win" aria-label="ลด Win">&minus;</button>
+        <button class="ctrl-btn plus" id="winAdd" title="เพิ่ม Win" aria-label="เพิ่ม Win">+</button>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="stat">
+      <div class="row">
+        <span class="letter">L</span>
+        <span class="count" id="lossCount">0</span>
+      </div>
+      <div class="controls">
+        <button class="ctrl-btn minus" id="lossMinus" title="ลด Loss" aria-label="ลด Loss">&minus;</button>
+        <button class="ctrl-btn plus" id="lossAdd" title="เพิ่ม Loss" aria-label="เพิ่ม Loss">+</button>
+      </div>
+    </div>
+
+  </div>
+
+  <button class="reset" id="resetBtn">รีเซ็ตเป็น 0</button>
+  <div class="status" id="statusMsg"></div>
+
+</div>
+
+<script>
+  const winEl = document.getElementById('winCount');
+  const lossEl = document.getElementById('lossCount');
+  const statusEl = document.getElementById('statusMsg');
+  const buttons = document.querySelectorAll('.ctrl-btn, .reset');
+
+  function pulse(el){
+    el.classList.remove('pulse');
+    requestAnimationFrame(() => el.classList.add('pulse'));
+    setTimeout(() => el.classList.remove('pulse'), 150);
+  }
+
+  function render(data){
+    const newWin = String(data.win ?? 0);
+    const newLoss = String(data.loss ?? 0);
+    if(winEl.textContent !== newWin){ winEl.textContent = newWin; pulse(winEl); }
+    if(lossEl.textContent !== newLoss){ lossEl.textContent = newLoss; pulse(lossEl); }
+  }
+
+  function setButtonsEnabled(enabled){
+    buttons.forEach(b => b.disabled = !enabled);
+  }
+
+  async function loadInitial(){
+    try{
+      const res = await fetch('/api/score', { cache: 'no-store' });
+      const data = await res.json();
+      render(data);
+      statusEl.textContent = '';
+    }catch(e){
+      statusEl.textContent = 'เชื่อมต่อ /api/score ไม่ได้ ตรวจสอบ Environment Variables บน Vercel';
+    }
+  }
+
+  async function sendAction(action){
+    setButtonsEnabled(false);
+    try{
+      const res = await fetch('/api/score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'action=' + encodeURIComponent(action)
+      });
+      const data = await res.json();
+      render(data);
+      statusEl.textContent = '';
+    }catch(e){
+      statusEl.textContent = 'ส่งค่าไม่สำเร็จ ลองใหม่อีกครั้ง';
+    }finally{
+      setButtonsEnabled(true);
+    }
+  }
+
+  document.getElementById('winAdd').addEventListener('click', () => sendAction('win_plus'));
+  document.getElementById('winMinus').addEventListener('click', () => sendAction('win_minus'));
+  document.getElementById('lossAdd').addEventListener('click', () => sendAction('loss_plus'));
+  document.getElementById('lossMinus').addEventListener('click', () => sendAction('loss_minus'));
+  document.getElementById('resetBtn').addEventListener('click', () => sendAction('reset'));
+
+  loadInitial();
+</script>
+
+</body>
+</html>
