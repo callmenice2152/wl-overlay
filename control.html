@@ -181,6 +181,14 @@
   const statusEl = document.getElementById('statusMsg');
   const buttons = document.querySelectorAll('.ctrl-btn, .reset');
 
+  let currentLocalScore = { win: 0, loss: 0 };
+  try {
+    const saved = localStorage.getItem('wl_score_backup');
+    if (saved) {
+      currentLocalScore = JSON.parse(saved);
+    }
+  } catch(e) {}
+
   function pulse(el){
     el.classList.remove('pulse');
     requestAnimationFrame(() => el.classList.add('pulse'));
@@ -192,27 +200,69 @@
     const newLoss = String(data.loss ?? 0);
     if(winEl.textContent !== newWin){ winEl.textContent = newWin; pulse(winEl); }
     if(lossEl.textContent !== newLoss){ lossEl.textContent = newLoss; pulse(lossEl); }
+
+    currentLocalScore = { win: Number(data.win ?? 0), loss: Number(data.loss ?? 0) };
+    try {
+      localStorage.setItem('wl_score_backup', JSON.stringify(currentLocalScore));
+    } catch(e) {}
   }
 
   function setButtonsEnabled(enabled){
     buttons.forEach(b => b.disabled = !enabled);
   }
 
+  async function fetchScoreApi(options = {}) {
+    try {
+      let res = await fetch('/api/score', { cache: 'no-store', ...options });
+      if (!res.ok && res.status === 404) {
+        // Fallback for XAMPP / Apache local server
+        res = await fetch('api/score.php', { cache: 'no-store', ...options });
+      }
+      return res;
+    } catch(e) {
+      return await fetch('api/score.php', { cache: 'no-store', ...options });
+    }
+  }
+
   async function loadInitial(){
     try{
-      const res = await fetch('/api/score', { cache: 'no-store' });
+      const res = await fetchScoreApi();
       const data = await res.json();
-      render(data);
+      
+      // If server cold-started to 0/0 but local device has saved non-zero score, re-sync to server
+      if ((data.win === 0 && data.loss === 0) && (currentLocalScore.win > 0 || currentLocalScore.loss > 0)) {
+        await syncToServer(currentLocalScore);
+      } else {
+        render(data);
+      }
       statusEl.textContent = '';
     }catch(e){
-      statusEl.textContent = 'เชื่อมต่อ /api/score ไม่ได้ ตรวจสอบ Environment Variables บน Vercel';
+      render(currentLocalScore);
+      statusEl.textContent = 'เชื่อมต่อระบบไม่ได้ (แสดงค่าสำรองในเครื่อง)';
     }
+  }
+
+  async function syncToServer(scoreObj){
+    try {
+      const res = await fetchScoreApi({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sync', win: scoreObj.win, loss: scoreObj.loss })
+      });
+      const data = await res.json();
+      render(data);
+    } catch(e) {}
   }
 
   async function sendAction(action){
     setButtonsEnabled(false);
     try{
-      const res = await fetch('/api/score', {
+      if (action === 'reset') {
+        currentLocalScore = { win: 0, loss: 0 };
+        try { localStorage.removeItem('wl_score_backup'); } catch(e) {}
+      }
+
+      const res = await fetchScoreApi({
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: 'action=' + encodeURIComponent(action)
