@@ -212,16 +212,7 @@
   }
 
   async function fetchScoreApi(options = {}) {
-    try {
-      let res = await fetch('/api/score', { cache: 'no-store', ...options });
-      if (!res.ok && res.status === 404) {
-        // Fallback for XAMPP / Apache local server
-        res = await fetch('api/score.php', { cache: 'no-store', ...options });
-      }
-      return res;
-    } catch(e) {
-      return await fetch('api/score.php', { cache: 'no-store', ...options });
-    }
+    return await fetch('/api/score', { cache: 'no-store', ...options });
   }
 
   async function loadInitial(){

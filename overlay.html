@@ -103,24 +103,14 @@
 
   async function poll(){
     try{
-      let res = await fetch('/api/score', { cache: 'no-store' });
-      if (!res.ok && res.status === 404) {
-        res = await fetch('api/score.php', { cache: 'no-store' });
-      }
+      const res = await fetch('/api/score', { cache: 'no-store' });
       const data = await res.json();
       const newWin = String(data.win ?? 0);
       const newLoss = String(data.loss ?? 0);
       if(winEl.textContent !== newWin){ winEl.textContent = newWin; pulse(winEl); }
       if(lossEl.textContent !== newLoss){ lossEl.textContent = newLoss; pulse(lossEl); }
     }catch(e){
-      try {
-        let res = await fetch('api/score.php', { cache: 'no-store' });
-        const data = await res.json();
-        const newWin = String(data.win ?? 0);
-        const newLoss = String(data.loss ?? 0);
-        if(winEl.textContent !== newWin){ winEl.textContent = newWin; pulse(winEl); }
-        if(lossEl.textContent !== newLoss){ lossEl.textContent = newLoss; pulse(lossEl); }
-      } catch(err) {}
+      // retry next tick
     }
   }
 
