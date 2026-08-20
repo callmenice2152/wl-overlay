@@ -181,11 +181,13 @@
   const statusEl = document.getElementById('statusMsg');
   const buttons = document.querySelectorAll('.ctrl-btn, .reset');
 
-  let currentLocalScore = { win: 0, loss: 0 };
+  let localState = { win: 0, loss: 0, version: 0 };
   try {
     const saved = localStorage.getItem('wl_score_backup');
     if (saved) {
-      currentLocalScore = JSON.parse(saved);
+      localState = JSON.parse(saved);
+      winEl.textContent = String(localState.win ?? 0);
+      lossEl.textContent = String(localState.loss ?? 0);
     }
   } catch(e) {}
 
@@ -201,9 +203,13 @@
     if(winEl.textContent !== newWin){ winEl.textContent = newWin; pulse(winEl); }
     if(lossEl.textContent !== newLoss){ lossEl.textContent = newLoss; pulse(lossEl); }
 
-    currentLocalScore = { win: Number(data.win ?? 0), loss: Number(data.loss ?? 0) };
+    localState = {
+      win: Number(data.win ?? 0),
+      loss: Number(data.loss ?? 0),
+      version: data.version || Date.now()
+    };
     try {
-      localStorage.setItem('wl_score_backup', JSON.stringify(currentLocalScore));
+      localStorage.setItem('wl_score_backup', JSON.stringify(localState));
     } catch(e) {}
   }
 
@@ -215,42 +221,48 @@
     return await fetch('/api/score', { cache: 'no-store', ...options });
   }
 
-  async function loadInitial(){
-    try{
-      const res = await fetchScoreApi();
-      const data = await res.json();
-      
-      // If server cold-started to 0/0 but local device has saved non-zero score, re-sync to server
-      if ((data.win === 0 && data.loss === 0) && (currentLocalScore.win > 0 || currentLocalScore.loss > 0)) {
-        await syncToServer(currentLocalScore);
-      } else {
-        render(data);
-      }
-      statusEl.textContent = '';
-    }catch(e){
-      render(currentLocalScore);
-      statusEl.textContent = 'เชื่อมต่อระบบไม่ได้ (แสดงค่าสำรองในเครื่อง)';
-    }
-  }
-
   async function syncToServer(scoreObj){
     try {
       const res = await fetchScoreApi({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'sync', win: scoreObj.win, loss: scoreObj.loss })
+        body: JSON.stringify({
+          action: 'sync',
+          win: scoreObj.win,
+          loss: scoreObj.loss,
+          version: scoreObj.version
+        })
       });
       const data = await res.json();
       render(data);
     } catch(e) {}
   }
 
+  async function checkAndSync(){
+    try{
+      const res = await fetchScoreApi();
+      const data = await res.json();
+      
+      const serverVersion = data.version || 0;
+      const isInitialized = data.initialized !== false;
+
+      if (!isInitialized && localState.version > 0 && (localState.win > 0 || localState.loss > 0)) {
+        await syncToServer(localState);
+      } else if (isInitialized && serverVersion >= localState.version) {
+        render(data);
+      }
+      statusEl.textContent = '';
+    }catch(e){
+      statusEl.textContent = 'เชื่อมต่อระบบไม่ได้ (แสดงค่าสำรองในเครื่อง)';
+    }
+  }
+
   async function sendAction(action){
     setButtonsEnabled(false);
     try{
       if (action === 'reset') {
-        currentLocalScore = { win: 0, loss: 0 };
-        try { localStorage.removeItem('wl_score_backup'); } catch(e) {}
+        localState = { win: 0, loss: 0, version: Date.now() };
+        try { localStorage.setItem('wl_score_backup', JSON.stringify(localState)); } catch(e) {}
       }
 
       const res = await fetchScoreApi({
@@ -274,7 +286,8 @@
   document.getElementById('lossMinus').addEventListener('click', () => sendAction('loss_minus'));
   document.getElementById('resetBtn').addEventListener('click', () => sendAction('reset'));
 
-  loadInitial();
+  checkAndSync();
+  setInterval(checkAndSync, 3000);
 </script>
 
 </body>

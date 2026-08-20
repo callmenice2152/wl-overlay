@@ -95,20 +95,64 @@
   const winEl = document.getElementById('winCount');
   const lossEl = document.getElementById('lossCount');
 
+  let localState = { win: 0, loss: 0, version: 0 };
+  try {
+    const saved = localStorage.getItem('wl_overlay_state');
+    if (saved) {
+      localState = JSON.parse(saved);
+      winEl.textContent = String(localState.win ?? 0);
+      lossEl.textContent = String(localState.loss ?? 0);
+    }
+  } catch(e) {}
+
   function pulse(el){
     el.classList.remove('pulse');
     requestAnimationFrame(() => el.classList.add('pulse'));
     setTimeout(() => el.classList.remove('pulse'), 150);
   }
 
+  function applyScore(win, loss, version) {
+    const newWin = String(win ?? 0);
+    const newLoss = String(loss ?? 0);
+    if(winEl.textContent !== newWin){ winEl.textContent = newWin; pulse(winEl); }
+    if(lossEl.textContent !== newLoss){ lossEl.textContent = newLoss; pulse(lossEl); }
+    localState = { win: Number(win ?? 0), loss: Number(loss ?? 0), version: version || Date.now() };
+    try {
+      localStorage.setItem('wl_overlay_state', JSON.stringify(localState));
+    } catch(e) {}
+  }
+
+  async function rehydrateServer(win, loss, version) {
+    try {
+      await fetch('/api/score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sync', win, loss, version })
+      });
+    } catch(e) {}
+  }
+
   async function poll(){
     try{
       const res = await fetch('/api/score', { cache: 'no-store' });
       const data = await res.json();
-      const newWin = String(data.win ?? 0);
-      const newLoss = String(data.loss ?? 0);
-      if(winEl.textContent !== newWin){ winEl.textContent = newWin; pulse(winEl); }
-      if(lossEl.textContent !== newLoss){ lossEl.textContent = newLoss; pulse(lossEl); }
+      
+      const serverVersion = data.version || 0;
+      const isInitialized = data.initialized !== false;
+
+      if (!isInitialized) {
+        // Server cold started and lost in-memory state
+        if (localState.version > 0 && (localState.win > 0 || localState.loss > 0)) {
+          // Re-hydrate server with our valid state
+          await rehydrateServer(localState.win, localState.loss, localState.version);
+          return;
+        }
+      }
+
+      // If server has a newer or valid initialized state
+      if (isInitialized && serverVersion >= localState.version) {
+        applyScore(data.win, data.loss, serverVersion);
+      }
     }catch(e){
       // retry next tick
     }
